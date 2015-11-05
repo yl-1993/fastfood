@@ -13,14 +13,14 @@ void FastFoodLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
   // input dim
   const int axis = bottom[0]->CanonicalAxisIndex(
-      //this->layer_param_.fastfood_product_param().axis());
-      this->layer_param_.inner_product_param().axis());
+      this->layer_param_.fastfood_param().axis());
+      //this->layer_param_.inner_product_param().axis());
   D_ = bottom[0]->count(axis);
   top[0]->Reshape(bottom[0]->num(), D_, 1, 1); // It's ok if D_ is beyong the range of labels
   // output dim
-  //N_ = this->layer_param_.fastfood_param().num_output();
+  N_ = this->layer_param_.fastfood_param().num_output();
 
-  //CHECK_EQ(D_, N_) << "Input dim must agree with the output dim";
+  CHECK_EQ(D_, N_) << "Input dim must agree with the output dim";
 
   CHECK_EQ(checkDimension(D_), true) << "Input dim must be a power of two"; 
   PIHBh = new Dtype[D_];
@@ -34,13 +34,21 @@ void FastFoodLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     int _param_num = 4;
     this->blobs_.resize(_param_num);
     // Intialize the weight
-    vector<int> weight_shape(1, D_);
     for (int i = 0; i < _param_num; ++i) {
+      vector<int> weight_shape(1, D_);
       this->blobs_[i].reset(new Blob<Dtype>(weight_shape));
-      if (i < 3) {
-        Dtype* buffer = this->blobs_[i]->mutable_cpu_data();
-        for (int j = 0 ; j < D_; ++j)
-          buffer[j] = rand()/(float)INT_MAX - 0.5;
+      if (i == 0) {
+        shared_ptr<Filler<Dtype> > s_filler(GetFiller<Dtype>(
+            this->layer_param_.fastfood_param().s_filler()));
+        s_filler->Fill(this->blobs_[i].get());
+      } else if (i == 1) {
+        shared_ptr<Filler<Dtype> > g_filler(GetFiller<Dtype>(
+            this->layer_param_.fastfood_param().g_filler()));
+        g_filler->Fill(this->blobs_[i].get());
+      } else if (i == 2) {
+        shared_ptr<Filler<Dtype> > b_filler(GetFiller<Dtype>(
+            this->layer_param_.fastfood_param().b_filler()));
+        b_filler->Fill(this->blobs_[i].get());
       }
     }
 

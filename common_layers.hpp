@@ -843,7 +843,8 @@ protected:
   void FHT(Dtype*, size_t );
   void permutateMatrix(Dtype* , const Dtype* , size_t, bool);
   bool checkDimension(size_t);
-  int D_;   
+  int D_;
+  int N_;   
   Dtype *PIHBh, *HGPIHBh;
 };
 
