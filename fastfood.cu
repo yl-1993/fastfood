@@ -20,23 +20,25 @@ void FastFoodLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
   const Dtype* B = this->blobs_[2]->gpu_data();
   const Dtype* PI = this->blobs_[3]->cpu_data();
 
-  caffe_gpu_mul(D_, B, bottom_data, top_data);
+  for (int m = 0; m < M_; ++m) {  
+    caffe_gpu_mul(D_, B, bottom_data+m*D_, top_data+m*D_);
 
-  FHT(top[0]->mutable_cpu_data(), D_);
+    FHT(top[0]->mutable_cpu_data()+m*D_, D_);
 
-  permutateMatrix(top[0]->mutable_cpu_data(), PI, D_, false);
-  // store for backward computation
-  caffe_copy(D_, top[0]->mutable_cpu_data(), PIHBh);
+    permutateMatrix(top[0]->mutable_cpu_data()+m*D_, PI, D_, false);
+    // store for backward computation
+    caffe_copy(D_, top[0]->mutable_cpu_data()+m*D_, PIHBh.mutable_cpu_data()+m*D_);
 
-  top[0]->mutable_gpu_data();
-  caffe_gpu_mul(D_, G, top_data, top_data);
- 
-  FHT(top[0]->mutable_cpu_data(), D_);
-  // store for backward computation
-  caffe_copy(D_, top[0]->mutable_cpu_data(), HGPIHBh); 
+    top[0]->mutable_gpu_data();
+    caffe_gpu_mul(D_, G, top_data+m*D_, top_data+m*D_);
+   
+    FHT(top[0]->mutable_cpu_data()+m*D_, D_);
+    // store for backward computation
+    caffe_copy(D_, top[0]->mutable_cpu_data()+m*D_, HGPIHBh.mutable_cpu_data()+m*D_); 
 
-  top[0]->mutable_gpu_data();
-  caffe_gpu_mul(D_, S, top_data, top_data);
+    top[0]->mutable_gpu_data();
+    caffe_gpu_mul(D_, S, top_data+m*D_, top_data+m*D_);
+  }
 
 }
 
@@ -53,48 +55,40 @@ void FastFoodLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   const Dtype* B = this->blobs_[2]->gpu_data();
   const Dtype* PI = this->blobs_[3]->cpu_data();
   Dtype* bottom_diff = bottom[0]->mutable_gpu_diff();
-  Dtype* S_diff = this->blobs_[0]->mutable_gpu_diff();
-  Dtype* G_diff = this->blobs_[1]->mutable_gpu_diff();
-  Dtype* B_diff = this->blobs_[2]->mutable_gpu_diff();
 
-  Dtype* G_diff_cpu = this->blobs_[1]->mutable_cpu_diff();
-  Dtype* B_diff_cpu = this->blobs_[2]->mutable_cpu_diff();
+  Blob<Dtype>* S_diff = new Blob<Dtype>(1, D_, 1, 1);
+  Blob<Dtype>* G_diff = new Blob<Dtype>(1, D_, 1, 1);
+  Blob<Dtype>* B_diff = new Blob<Dtype>(1, D_, 1, 1);
 
-  // compute S_diff
-  Blob<Dtype>* tmp_blob = new Blob<Dtype>(1, D_, 1, 1);
-  caffe_copy(D_, HGPIHBh, tmp_blob->mutable_cpu_data());
-  caffe_gpu_mul(D_, top_diff, tmp_blob->gpu_data(), S_diff);
+  caffe_gpu_set(D_, Dtype(0.0), this->blobs_[0]->mutable_gpu_diff());
+  caffe_gpu_set(D_, Dtype(0.0), this->blobs_[1]->mutable_gpu_diff());
+  caffe_gpu_set(D_, Dtype(0.0), this->blobs_[2]->mutable_gpu_diff());
 
+  for (int m = 0; m < M_; ++m) {  
+    // compute S_diff
+    caffe_gpu_mul(D_, top_diff+m*D_, HGPIHBh.gpu_data()+m*D_, S_diff->mutable_gpu_diff());
 
-  // compute G_diff
-  this->blobs_[1]->mutable_gpu_diff();
-  caffe_gpu_mul(D_, top_diff, S, G_diff);
+    // compute G_diff
+    caffe_gpu_mul(D_, top_diff+m*D_, S, G_diff->mutable_gpu_diff());
+    FHT(G_diff->mutable_cpu_diff(), D_);
+    caffe_gpu_mul(D_, G_diff->mutable_gpu_diff(), PIHBh.gpu_data()+m*D_, G_diff->mutable_gpu_diff());
 
-  this->blobs_[1]->mutable_cpu_diff();
-  FHT(G_diff_cpu, D_);
+    // compute bottom_diff&&B_diff
+    caffe_gpu_mul(D_, top_diff+m*D_, S, B_diff->mutable_gpu_diff());
 
-  caffe_copy(D_, PIHBh, tmp_blob->mutable_cpu_data());
-  this->blobs_[1]->mutable_gpu_diff();
-  caffe_gpu_mul(D_, G_diff, tmp_blob->gpu_data(), G_diff);
+    FHT(B_diff->mutable_cpu_diff(), D_);
+    caffe_gpu_mul(D_, B_diff->mutable_gpu_diff(), G, B_diff->mutable_gpu_diff());
+    permutateMatrix(B_diff->mutable_cpu_diff(), PI, D_, true);
 
-  // compute bottom_diff&&B_diff
-  this->blobs_[2]->mutable_gpu_diff();
-  caffe_gpu_mul(D_, top_diff, S, B_diff);
+    FHT(B_diff->mutable_cpu_diff(), D_);
+     
+    caffe_gpu_mul(D_, B_diff->mutable_gpu_diff(), B, bottom_diff+m*D_);
+    caffe_gpu_mul(D_, B_diff->mutable_gpu_diff(), bottom_data+m*D_, B_diff->mutable_gpu_diff());
 
-  this->blobs_[2]->mutable_cpu_diff();
-  FHT(B_diff_cpu, D_);
-
-  this->blobs_[2]->mutable_gpu_diff();
-  caffe_gpu_mul(D_, B_diff, G, B_diff);
-
-  this->blobs_[2]->mutable_cpu_diff(); 
-  permutateMatrix(B_diff_cpu, PI, D_, true);
-
-  FHT(B_diff_cpu, D_);
-
-  this->blobs_[2]->mutable_gpu_diff(); 
-  caffe_gpu_mul(D_, B_diff, B, bottom_diff);
-  caffe_gpu_mul(D_, B_diff, bottom_data, B_diff);
+    caffe_gpu_axpy(D_, Dtype(1.0), S_diff->mutable_gpu_diff(), this->blobs_[0]->mutable_gpu_diff());
+    caffe_gpu_axpy(D_, Dtype(1.0), G_diff->mutable_gpu_diff(), this->blobs_[1]->mutable_gpu_diff());
+    caffe_gpu_axpy(D_, Dtype(1.0), B_diff->mutable_gpu_diff(), this->blobs_[2]->mutable_gpu_diff());
+  }
 }
 
 INSTANTIATE_LAYER_GPU_FUNCS(FastFoodLayer);

@@ -845,7 +845,9 @@ protected:
   bool checkDimension(size_t);
   int D_;
   int N_;   
-  Dtype *PIHBh, *HGPIHBh;
+  int M_;
+  bool bias_term_;
+  Blob<Dtype> PIHBh, HGPIHBh;
 };
 
 
