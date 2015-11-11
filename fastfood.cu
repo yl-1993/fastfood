@@ -40,6 +40,11 @@ void FastFoodLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     caffe_gpu_mul(D_, S, top_data+m*D_, top_data+m*D_);
   }
 
+  if (bias_term_) {
+    caffe_gpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1, (Dtype)1.,
+        bias_multiplier_.gpu_data(),
+        this->blobs_[4]->gpu_data(), (Dtype)1., top[0]->mutable_gpu_data());
+  }
 }
 
 // TODO: GPU version of FHT
@@ -89,6 +94,13 @@ void FastFoodLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     caffe_gpu_axpy(D_, Dtype(1.0), G_diff->mutable_gpu_diff(), this->blobs_[1]->mutable_gpu_diff());
     caffe_gpu_axpy(D_, Dtype(1.0), B_diff->mutable_gpu_diff(), this->blobs_[2]->mutable_gpu_diff());
   }
+
+  if (bias_term_) {
+    caffe_gpu_gemv<Dtype>(CblasTrans, M_, N_, (Dtype)1., top[0]->gpu_diff(),
+        bias_multiplier_.gpu_data(), (Dtype)1.,
+        this->blobs_[4]->mutable_gpu_diff());
+  }
+
 }
 
 INSTANTIATE_LAYER_GPU_FUNCS(FastFoodLayer);

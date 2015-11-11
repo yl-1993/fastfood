@@ -848,6 +848,7 @@ protected:
   int M_;
   bool bias_term_;
   Blob<Dtype> PIHBh, HGPIHBh;
+  Blob<Dtype> bias_multiplier_;
 };
 
 

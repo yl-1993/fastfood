@@ -26,7 +26,7 @@ void FastFoodLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   CHECK_EQ(checkDimension(D_), true) << "Input dim must be a power of two"; 
 
-  // bias_term_ = this->layer_param_.fastfood_param().bias_term();
+  bias_term_ = this->layer_param_.fastfood_param().bias_term();
 
   PIHBh.Reshape(M_, D_, 1, 1);
   HGPIHBh.Reshape(M_, D_, 1, 1);
@@ -44,7 +44,7 @@ void FastFoodLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     }
     // Intialize the weight
     for (int i = 0; i < _param_num; ++i) {
-      vector<int> weight_shape(1, D_);
+      vector<int> weight_shape(1, N_);
       this->blobs_[i].reset(new Blob<Dtype>(weight_shape));
       if (i == 0) {
         shared_ptr<Filler<Dtype> > s_filler(GetFiller<Dtype>(
@@ -71,13 +71,15 @@ void FastFoodLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       buffer[j] = permutation_idx[j];
     }
 
-    // if (bias_term_) {
-    //   vector<int> bias_shape(1, N_);
-    //   this->blobs_[4].reset(new Blob<Dtype>(bias_shape));
-    //   shared_ptr<Filler<Dtype> > bias_filler(GetFiller<Dtype>(
-    //       this->layer_param_.inner_product_param().bias_filler()));
-    //   bias_filler->Fill(this->blobs_[4].get());
-    // }
+    if (bias_term_) {
+      vector<int> bias_shape(1, N_);
+      this->blobs_[4].reset(new Blob<Dtype>(bias_shape));
+      shared_ptr<Filler<Dtype> > bias_filler(GetFiller<Dtype>(
+          this->layer_param_.fastfood_param().bias_filler()));
+      bias_filler->Fill(this->blobs_[4].get());
+      bias_multiplier_.Reshape(bias_shape);
+      caffe_set(M_, Dtype(1), bias_multiplier_.mutable_cpu_data());
+    }
   }  // parameter initialization
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 }
@@ -106,11 +108,11 @@ void FastFoodLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     caffe_mul(D_, S, top_data+m*D_, top_data+m*D_);
   }
 
-  // if (bias_term_) {
-  //   caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1, (Dtype)1.,
-  //       bias_multiplier_.cpu_data(),
-  //       this->blobs_[1]->cpu_data(), (Dtype)1., top_data);
-  // }
+  if (bias_term_) {
+    caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1, (Dtype)1.,
+        bias_multiplier_.cpu_data(),
+        this->blobs_[4]->cpu_data(), (Dtype)1., top_data);
+  }
 }
 
 
@@ -160,14 +162,14 @@ void FastFoodLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     caffe_axpy(D_, Dtype(1.0), B_diff->mutable_cpu_diff(), this->blobs_[2]->mutable_cpu_diff());
   }
 
-  // for (int i = 0 ; i < D_; ++i){
-  //    this->blobs_[3]->mutable_cpu_data()[i] = ceil(this->blobs_[3]->cpu_data()[i]);
-  // }
-  // if (bias_term_) {
-  //   caffe_cpu_gemv<Dtype>(CblasTrans, M_, N_, (Dtype)1., top_diff,
-  //       bias_multiplier_.cpu_data(), (Dtype)1.,
-  //       this->blobs_[1]->mutable_cpu_diff());
-  // }
+  for (int i = 0 ; i < D_; ++i){
+     this->blobs_[3]->mutable_cpu_data()[i] = ceil(this->blobs_[3]->cpu_data()[i]);
+  }
+  if (bias_term_) {
+    caffe_cpu_gemv<Dtype>(CblasTrans, M_, N_, (Dtype)1., top_diff,
+        bias_multiplier_.cpu_data(), (Dtype)1.,
+        this->blobs_[4]->mutable_cpu_diff());
+  }
 
 }
 
