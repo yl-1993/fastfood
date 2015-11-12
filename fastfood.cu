@@ -61,9 +61,10 @@ void FastFoodLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   const Dtype* PI = this->blobs_[3]->cpu_data();
   Dtype* bottom_diff = bottom[0]->mutable_gpu_diff();
 
-  Blob<Dtype>* S_diff = new Blob<Dtype>(1, D_, 1, 1);
-  Blob<Dtype>* G_diff = new Blob<Dtype>(1, D_, 1, 1);
-  Blob<Dtype>* B_diff = new Blob<Dtype>(1, D_, 1, 1);
+  Blob<Dtype> S_diff, G_diff, B_diff;
+  S_diff.Reshape(1, D_, 1, 1);
+  G_diff.Reshape(1, D_, 1, 1);
+  B_diff.Reshape(1, D_, 1, 1);
 
   caffe_gpu_set(D_, Dtype(0.0), this->blobs_[0]->mutable_gpu_diff());
   caffe_gpu_set(D_, Dtype(0.0), this->blobs_[1]->mutable_gpu_diff());
@@ -71,28 +72,28 @@ void FastFoodLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 
   for (int m = 0; m < M_; ++m) {  
     // compute S_diff
-    caffe_gpu_mul(D_, top_diff+m*D_, HGPIHBh.gpu_data()+m*D_, S_diff->mutable_gpu_diff());
+    caffe_gpu_mul(D_, top_diff+m*D_, HGPIHBh.gpu_data()+m*D_, S_diff.mutable_gpu_diff());
 
     // compute G_diff
-    caffe_gpu_mul(D_, top_diff+m*D_, S, G_diff->mutable_gpu_diff());
-    FHT(G_diff->mutable_cpu_diff(), D_);
-    caffe_gpu_mul(D_, G_diff->mutable_gpu_diff(), PIHBh.gpu_data()+m*D_, G_diff->mutable_gpu_diff());
+    caffe_gpu_mul(D_, top_diff+m*D_, S, G_diff.mutable_gpu_diff());
+    FHT(G_diff.mutable_cpu_diff(), D_);
+    caffe_gpu_mul(D_, G_diff.mutable_gpu_diff(), PIHBh.gpu_data()+m*D_, G_diff.mutable_gpu_diff());
 
     // compute bottom_diff&&B_diff
-    caffe_gpu_mul(D_, top_diff+m*D_, S, B_diff->mutable_gpu_diff());
+    caffe_gpu_mul(D_, top_diff+m*D_, S, B_diff.mutable_gpu_diff());
 
-    FHT(B_diff->mutable_cpu_diff(), D_);
-    caffe_gpu_mul(D_, B_diff->mutable_gpu_diff(), G, B_diff->mutable_gpu_diff());
-    permutateMatrix(B_diff->mutable_cpu_diff(), PI, D_, true);
+    FHT(B_diff.mutable_cpu_diff(), D_);
+    caffe_gpu_mul(D_, B_diff.mutable_gpu_diff(), G, B_diff.mutable_gpu_diff());
+    permutateMatrix(B_diff.mutable_cpu_diff(), PI, D_, true);
 
-    FHT(B_diff->mutable_cpu_diff(), D_);
+    FHT(B_diff.mutable_cpu_diff(), D_);
      
-    caffe_gpu_mul(D_, B_diff->mutable_gpu_diff(), B, bottom_diff+m*D_);
-    caffe_gpu_mul(D_, B_diff->mutable_gpu_diff(), bottom_data+m*D_, B_diff->mutable_gpu_diff());
+    caffe_gpu_mul(D_, B_diff.mutable_gpu_diff(), B, bottom_diff+m*D_);
+    caffe_gpu_mul(D_, B_diff.mutable_gpu_diff(), bottom_data+m*D_, B_diff.mutable_gpu_diff());
 
-    caffe_gpu_axpy(D_, Dtype(1.0), S_diff->mutable_gpu_diff(), this->blobs_[0]->mutable_gpu_diff());
-    caffe_gpu_axpy(D_, Dtype(1.0), G_diff->mutable_gpu_diff(), this->blobs_[1]->mutable_gpu_diff());
-    caffe_gpu_axpy(D_, Dtype(1.0), B_diff->mutable_gpu_diff(), this->blobs_[2]->mutable_gpu_diff());
+    caffe_gpu_axpy(D_, Dtype(1.0), S_diff.mutable_gpu_diff(), this->blobs_[0]->mutable_gpu_diff());
+    caffe_gpu_axpy(D_, Dtype(1.0), G_diff.mutable_gpu_diff(), this->blobs_[1]->mutable_gpu_diff());
+    caffe_gpu_axpy(D_, Dtype(1.0), B_diff.mutable_gpu_diff(), this->blobs_[2]->mutable_gpu_diff());
   }
 
   if (bias_term_) {

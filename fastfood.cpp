@@ -129,9 +129,10 @@ void FastFoodLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   const Dtype* PI = this->blobs_[3]->cpu_data();
   Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
 
-  Blob<Dtype>* S_diff = new Blob<Dtype>(1, D_, 1, 1);
-  Blob<Dtype>* G_diff = new Blob<Dtype>(1, D_, 1, 1);
-  Blob<Dtype>* B_diff = new Blob<Dtype>(1, D_, 1, 1);
+  Blob<Dtype> S_diff, G_diff, B_diff;
+  S_diff.Reshape(1, D_, 1, 1);
+  G_diff.Reshape(1, D_, 1, 1);
+  B_diff.Reshape(1, D_, 1, 1);
 
   caffe_set(D_, Dtype(0.0), this->blobs_[0]->mutable_cpu_diff());
   caffe_set(D_, Dtype(0.0), this->blobs_[1]->mutable_cpu_diff());
@@ -139,32 +140,29 @@ void FastFoodLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 
   for (int m = 0; m < M_; ++m) {  
     // compute S_diff
-    caffe_mul(D_, top_diff+m*D_, HGPIHBh.cpu_data()+m*D_, S_diff->mutable_cpu_diff());
+    caffe_mul(D_, top_diff+m*D_, HGPIHBh.cpu_data()+m*D_, S_diff.mutable_cpu_diff());
 
     // compute G_diff
-    caffe_mul(D_, top_diff+m*D_, S, G_diff->mutable_cpu_diff());
-    FHT(G_diff->mutable_cpu_diff(), D_);
-    caffe_mul(D_, G_diff->cpu_diff(), PIHBh.cpu_data()+m*D_, G_diff->mutable_cpu_diff());
+    caffe_mul(D_, top_diff+m*D_, S, G_diff.mutable_cpu_diff());
+    FHT(G_diff.mutable_cpu_diff(), D_);
+    caffe_mul(D_, G_diff.cpu_diff(), PIHBh.cpu_data()+m*D_, G_diff.mutable_cpu_diff());
 
     // compute bottom_diff&&B_diff
-    caffe_mul(D_, top_diff, S, B_diff->mutable_cpu_diff());
-    FHT(B_diff->mutable_cpu_diff(), D_);
-    caffe_mul(D_, B_diff->mutable_cpu_diff(), G, B_diff->mutable_cpu_diff());
-    permutateMatrix(B_diff->mutable_cpu_diff(), PI, D_, true);
-    FHT(B_diff->mutable_cpu_diff(), D_);
+    caffe_mul(D_, top_diff, S, B_diff.mutable_cpu_diff());
+    FHT(B_diff.mutable_cpu_diff(), D_);
+    caffe_mul(D_, B_diff.mutable_cpu_diff(), G, B_diff.mutable_cpu_diff());
+    permutateMatrix(B_diff.mutable_cpu_diff(), PI, D_, true);
+    FHT(B_diff.mutable_cpu_diff(), D_);
 
 
-    caffe_mul(D_, B_diff->mutable_cpu_diff(), B, bottom_diff+m*D_);
-    caffe_mul(D_, B_diff->mutable_cpu_diff(), bottom_data+m*D_, B_diff->mutable_cpu_diff());
+    caffe_mul(D_, B_diff.mutable_cpu_diff(), B, bottom_diff+m*D_);
+    caffe_mul(D_, B_diff.mutable_cpu_diff(), bottom_data+m*D_, B_diff.mutable_cpu_diff());
 
-    caffe_axpy(D_, Dtype(1.0), S_diff->mutable_cpu_diff(), this->blobs_[0]->mutable_cpu_diff());
-    caffe_axpy(D_, Dtype(1.0), G_diff->mutable_cpu_diff(), this->blobs_[1]->mutable_cpu_diff());
-    caffe_axpy(D_, Dtype(1.0), B_diff->mutable_cpu_diff(), this->blobs_[2]->mutable_cpu_diff());
+    caffe_axpy(D_, Dtype(1.0), S_diff.mutable_cpu_diff(), this->blobs_[0]->mutable_cpu_diff());
+    caffe_axpy(D_, Dtype(1.0), G_diff.mutable_cpu_diff(), this->blobs_[1]->mutable_cpu_diff());
+    caffe_axpy(D_, Dtype(1.0), B_diff.mutable_cpu_diff(), this->blobs_[2]->mutable_cpu_diff());
   }
 
-  for (int i = 0 ; i < D_; ++i){
-     this->blobs_[3]->mutable_cpu_data()[i] = ceil(this->blobs_[3]->cpu_data()[i]);
-  }
   if (bias_term_) {
     caffe_cpu_gemv<Dtype>(CblasTrans, M_, N_, (Dtype)1., top_diff,
         bias_multiplier_.cpu_data(), (Dtype)1.,
@@ -185,7 +183,7 @@ bool FastFoodLayer<Dtype>::checkDimension(size_t length)
 
 template <typename Dtype>
 void FastFoodLayer<Dtype>::permutateMatrix(Dtype* data, const Dtype* permutation, size_t length, bool trans) {
-  Dtype* buffer = new Dtype[length];
+  Dtype buffer[length];
   if (!trans) {   
     for (size_t i = 0 ; i < length; ++i) {
       buffer[i] = data[(int)(permutation[i]+0.5)];
